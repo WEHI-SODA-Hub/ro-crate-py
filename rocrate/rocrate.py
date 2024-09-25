@@ -16,9 +16,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 
 import errno
+from typing import Any, Iterable
 import uuid
+from uuid import UUID
 import zipfile
 import atexit
 import os
@@ -55,12 +58,13 @@ from .model.computationalworkflow import galaxy_to_abstract_cwl
 from .model.computerlanguage import get_lang
 from .model.testservice import get_service
 from .model.softwareapplication import get_app
+from .types import EntityMap, StrPath
 
 from .utils import is_url, subclasses, get_norm_value, walk, as_list
 from .metadata import read_metadata, find_root_entity_id
 
 
-def pick_type(json_entity, type_map, fallback=None):
+def pick_type(json_entity: dict[str, Any], type_map: dict[str, type], fallback: Any=None):
     try:
         t = json_entity["@type"]
     except KeyError:
@@ -72,9 +76,15 @@ def pick_type(json_entity, type_map, fallback=None):
     return fallback
 
 
-class ROCrate():
+class ROCrate:
+    uuid: UUID
+    arcp_base_uri: str
+    preview: Preview | None
+    source: str | Path | None
+    exclude: Iterable[str] | None
+    __entity_map: EntityMap
 
-    def __init__(self, source=None, gen_preview=False, init=False, exclude=None):
+    def __init__(self, source: str | Path | None=None, gen_preview: bool=False, init: bool=False, exclude: Iterable[str] | None=None):
         self.exclude = exclude
         self.__entity_map = {}
         # TODO: add this as @base in the context? At least when loading
@@ -94,7 +104,7 @@ class ROCrate():
         # in the zip case, self.source is the extracted dir
         self.source = source
 
-    def __init_from_tree(self, top_dir, gen_preview=False):
+    def __init_from_tree(self, top_dir: StrPath, gen_preview: bool=False) -> None:
         top_dir = Path(top_dir)
         if not top_dir.is_dir():
             raise NotADirectoryError(errno.ENOTDIR, f"'{top_dir}': not a directory")
@@ -113,7 +123,7 @@ class ROCrate():
                 elif not gen_preview:
                     self.add(Preview(self, source))
 
-    def __read(self, source, gen_preview=False):
+    def __read(self, source: StrPath | dict, gen_preview: bool=False) -> StrPath:
         if isinstance(source, dict):
             metadata_path = source
         else:
@@ -136,7 +146,7 @@ class ROCrate():
         self.__read_contextual_entities(entities)
         return source
 
-    def __read_data_entities(self, entities, source, gen_preview):
+    def __read_data_entities(self, entities, source: StrPath, gen_preview: bool):
         if isinstance(source, dict):
             source = Path("")
         metadata_id, root_id = find_root_entity_id(entities)
@@ -312,12 +322,12 @@ class ROCrate():
             about += legacy_about
         return list(set(mentions + about))  # remove any duplicate refs
 
-    def resolve_id(self, id_):
+    def resolve_id(self, id_: str) -> str:
         if not is_url(id_):
             id_ = urljoin(self.arcp_base_uri, id_)  # also does path normalization
         return id_.rstrip("/")
 
-    def get_entities(self):
+    def get_entities(self) -> Iterable[Entity]:
         return self.__entity_map.values()
 
     def _get_root_jsonld(self):
@@ -387,7 +397,7 @@ class ROCrate():
                 top.append_to("hasPart", dir_)
         return top
 
-    def add(self, *entities):
+    def add(self, *entities: Entity):
         """\
         Add one or more entities to this RO-Crate.
 

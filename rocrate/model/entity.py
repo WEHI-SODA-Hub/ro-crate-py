@@ -25,10 +25,16 @@ from collections.abc import MutableMapping
 from dateutil.parser import isoparse
 from .. import vocabs
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rocrate.rocrate import ROCrate
+
 
 class Entity(MutableMapping):
+    crate: ROCrate
 
-    def __init__(self, crate, identifier=None, properties=None):
+    def __init__(self, crate: ROCrate, identifier: str | None=None, properties: dict | None=None):
         self.crate = crate
         if identifier:
             self.__id = self.format_id(identifier)
@@ -48,7 +54,7 @@ class Entity(MutableMapping):
 
     # Format the given ID with rules appropriate for this type.
     # For example, Dataset (directory) data entities SHOULD end with /
-    def format_id(self, identifier):
+    def format_id(self, identifier: str) -> str:
         return str(identifier)
 
     def __repr__(self):
@@ -67,7 +73,7 @@ class Entity(MutableMapping):
             return clsName
         return "Thing"
 
-    def canonical_id(self):
+    def canonical_id(self) -> str:
         return self.crate.resolve_id(self.id)
 
     def __hash__(self):

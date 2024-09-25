@@ -21,23 +21,34 @@
 
 import os
 from datetime import datetime, timezone
+from typing import Iterable, TypeVar
 from urllib.parse import urlsplit
 
+T = TypeVar("T")
 
-def as_list(value):
+def as_list(value: list[T] | T) -> list[T]:
+    """
+    Puts a value into a list if it isn't already
+    """
     if isinstance(value, list):
         return value
     return [value]
 
 
-def is_url(string):
+def is_url(string: str) -> bool:
+    """
+    Determines if a string is an URL
+    """
     parts = urlsplit(string)
     if os.name == "nt" and len(parts.scheme) == 1:
         return False
     return bool(parts.scheme)
 
 
-def iso_now():
+def iso_now() -> str:
+    """
+    Gets the current ISO timestamp
+    """
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
@@ -67,7 +78,16 @@ def get_norm_value(json_entity, prop):
         raise ValueError(f"Malformed value for {prop!r}: {json_entity.get(prop)!r}")
 
 
-def walk(top, topdown=True, onerror=None, followlinks=False, exclude=None):
+def walk(top: StrPath, topdown: bool=True, onerror: None=None, followlinks: bool=False, exclude: Iterable[str] | None=None) -> Iterable[tuple[str, list[str], list[str]]]:
+    """
+    Recursively walks a directory tree
+
+    Args:
+        top: Root directory
+        exclude: List of file or directory names to exclude
+    Return:
+        An iterable that returns tuples of `(root, subdirectories, files)`
+    """
     exclude = frozenset(exclude or [])
     for root, dirs, files in os.walk(top):
         if exclude:
