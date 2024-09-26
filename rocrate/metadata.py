@@ -20,17 +20,16 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 import warnings
 
-from rocrate.types import JSON, Context, EntityMap, JsonLd, JsonLdNode
+from rocrate.types import Context, EntityLike, EntityMap
 
 from .model import Metadata, LegacyMetadata
 
 
-def read_metadata(metadata_path: JsonLd | str) -> tuple[
+def read_metadata(metadata_path: EntityLike | str) -> tuple[
     Context,
-    dict[str, JsonLdNode]
+    dict[str, EntityLike]
 ]:
     """\
     Read an RO-Crate metadata file.
@@ -41,11 +40,12 @@ def read_metadata(metadata_path: JsonLd | str) -> tuple[
     Returns:
         a tuple of two elements: the context; a dictionary that maps entity ids to the entities themselves.
     """
-    if isinstance(metadata_path, dict):
-        metadata = metadata_path
-    else:
+    metadata: EntityLike
+    if isinstance(metadata_path, str):
         with open(metadata_path) as f:
             metadata = json.load(f)
+    else:
+        metadata = metadata_path
     try:
         context = metadata['@context']
         graph = metadata['@graph']
@@ -54,7 +54,7 @@ def read_metadata(metadata_path: JsonLd | str) -> tuple[
     return context, {_["@id"]: _ for _ in graph}
 
 
-def _check_descriptor(descriptor: JsonLdNode, entities: EntityMap) -> tuple[str, str]:
+def _check_descriptor(descriptor: EntityLike, entities: EntityMap) -> tuple[str, str]:
     if descriptor["@type"] != "CreativeWork":
         raise ValueError('metadata descriptor must be of type "CreativeWork"')
     try:
@@ -66,7 +66,7 @@ def _check_descriptor(descriptor: JsonLdNode, entities: EntityMap) -> tuple[str,
     return descriptor["@id"], root["@id"]
 
 
-def find_root_entity_id(entities: EntityMap):
+def find_root_entity_id(entities: EntityMap) -> tuple[str, str]:
     """\
     Find metadata file descriptor and root data entity.
 
@@ -96,7 +96,7 @@ def find_root_entity_id(entities: EntityMap):
     descriptor = entities.get(Metadata.BASENAME, entities.get(LegacyMetadata.BASENAME))
     if descriptor:
         return _check_descriptor(descriptor, entities)
-    candidates = []
+    candidates: list[tuple[str, str]] = []
     for id_, e in entities.items():
         basename = id_.rsplit("/", 1)[-1]
         if basename == Metadata.BASENAME or basename == LegacyMetadata.BASENAME:

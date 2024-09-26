@@ -58,7 +58,8 @@ from .model.computationalworkflow import galaxy_to_abstract_cwl
 from .model.computerlanguage import get_lang
 from .model.testservice import get_service
 from .model.softwareapplication import get_app
-from .types import EntityMap, StrPath
+from .types import EntityLike, EntityMap, Properties, StrPath, is_str_path
+import .docstrings
 
 from .utils import is_url, subclasses, get_norm_value, walk, as_list
 from .metadata import read_metadata, find_root_entity_id
@@ -80,11 +81,11 @@ class ROCrate:
     uuid: UUID
     arcp_base_uri: str
     preview: Preview | None
-    source: str | Path | None
+    source: StrPath | None
     exclude: Iterable[str] | None
     __entity_map: EntityMap
 
-    def __init__(self, source: str | Path | None=None, gen_preview: bool=False, init: bool=False, exclude: Iterable[str] | None=None):
+    def __init__(self, source: StrPath | None=None, gen_preview: bool=False, init: bool=False, exclude: Iterable[str] | None=None):
         self.exclude = exclude
         self.__entity_map = {}
         # TODO: add this as @base in the context? At least when loading
@@ -94,7 +95,7 @@ class ROCrate:
         self.preview = None
         if gen_preview:
             self.add(Preview(self))
-        if not source:
+        if source is None:
             # create a new ro-crate
             self.add(RootDataset(self), Metadata(self))
         elif init:
@@ -123,10 +124,8 @@ class ROCrate:
                 elif not gen_preview:
                     self.add(Preview(self, source))
 
-    def __read(self, source: StrPath | dict, gen_preview: bool=False) -> StrPath:
-        if isinstance(source, dict):
-            metadata_path = source
-        else:
+    def __read(self, source: StrPath | EntityLike, gen_preview: bool=False) -> StrPath:
+        if is_str_path(source):
             source = Path(source)
             if not source.exists():
                 raise FileNotFoundError(errno.ENOENT, f"'{source}' not found")
@@ -141,6 +140,9 @@ class ROCrate:
                 metadata_path = source / LegacyMetadata.BASENAME
             if not metadata_path.is_file():
                 raise ValueError(f"Not a valid RO-Crate: missing {Metadata.BASENAME}")
+        else:
+            metadata_path = source
+           
         _, entities = read_metadata(metadata_path)
         self.__read_data_entities(entities, source, gen_preview)
         self.__read_contextual_entities(entities)
@@ -330,59 +332,107 @@ class ROCrate:
     def get_entities(self) -> Iterable[Entity]:
         return self.__entity_map.values()
 
-    def _get_root_jsonld(self):
-        self.root_dataset.properties()
+    def _get_root_jsonld(self) -> dict[str, str]:
+        return self.root_dataset.properties()
 
-    def dereference(self, entity_id, default=None):
+    def dereference(self, entity_id: str, default: Entity | None=None) -> Entity | None:
         canonical_id = self.resolve_id(entity_id)
         return self.__entity_map.get(canonical_id, default)
 
     get = dereference
 
-    def get_by_type(self, type_, exact=False):
-        type_ = set(as_list(type_))
+    def get_by_type(self, type_: str | Iterable[str], exact: bool=False) -> list[Entity]:
+        """
+        Returns all entities with the given `@type` field
+
+        Args:
+            type_: The name of one or more types to select
+            exact: If true, then only select entities that have exactly all the types specified in `type_`. Otherwise, allow selected entites to have additional other types.
+        """
+        type_set = set(as_list(type_))
         if exact:
-            return [_ for _ in self.get_entities() if type_ == set(as_list(_.type))]
+            return [_ for _ in self.get_entities() if type_set == set(as_list(_.type))]
         else:
-            return [_ for _ in self.get_entities() if type_ <= set(as_list(_.type))]
+            return [_ for _ in self.get_entities() if type_set <= set(as_list(_.type))]
 
     def add_file(
             self,
-            source=None,
-            dest_path=None,
-            fetch_remote=False,
-            validate_url=False,
-            properties=None
-    ):
-        return self.add(File(
+            source: StrPath | None=None,
+            dest_path: StrPath | None=None,
+            fetch_remote: bool=False,
+            validate_url: bool=False,
+            properties: Properties=None
+    ) -> File:
+        """
+        Create and add a new `File` entity to the crate
+
+        Args:
+            source: Path to the file to be added
+            dest_path: Path to where the file will be located, relative to the crate root
+            fetch_remote: If true, the file specified by `source` will be downloaded and added to the crate
+            validate_url: If `True`, and if `source` is a remote URL, then fields such as `sdDatePublished`, `contentSize` and `encodingFormat` will be populated from the remote server
+            properties: A dictionary of additional properties to add to the Entity
+
+        Returns:
+            The new `File` entity
+        """
+        file = File(
             self,
             source=source,
             dest_path=dest_path,
             fetch_remote=fetch_remote,
             validate_url=validate_url,
             properties=properties
-        ))
+        )
+        self.add(file)
+        return file
 
     def add_dataset(
             self,
-            source=None,
-            dest_path=None,
-            fetch_remote=False,
-            validate_url=False,
-            properties=None
-    ):
-        return self.add(Dataset(
+            source: StrPath | None=None,
+            dest_path: StrPath | None=None,
+            fetch_remote: bool=False,
+            validate_url: bool=False,
+            properties: Properties=None
+    ) -> Dataset:
+        """
+        Create and add a new `Dataset` entity to the crate
+
+        Args:
+            source: Path to the directory to be added
+            dest_path: Path to where the file will be located, relative to the crate root
+            fetch_remote: If true, the file specified by `source` will be downloaded and added to the crate
+            validate_url: If `True`, and if `source` is a remote URL, then fields such as `sdDatePublished`, `contentSize` and `encodingFormat` will be populated from the remote server
+            properties: A dictionary of additional properties to add to the Entity
+
+        Returns:
+            The new `File` entity
+        """
+        dataset = Dataset(
             self,
             source=source,
             dest_path=dest_path,
             fetch_remote=fetch_remote,
             validate_url=validate_url,
             properties=properties
-        ))
+        )
+        self.add(dataset)
+        return dataset
 
     add_directory = add_dataset
 
-    def add_tree(self, source, dest_path=None, properties=None):
+    def add_tree(self, source: StrPath, dest_path: StrPath | None=None, properties: Properties=None) -> Dataset:
+        """
+        Create and add a new `Dataset` entity to the crate, along with all child files and directories.
+
+        Args:
+            source: Path to the directory to be added
+            dest_path: Path to where the file will be located, relative to the crate root
+            properties: Currently not implemented
+
+        Returns:
+            The new `Dataset` entity
+        """
         if not source:
             raise ValueError("source must refer to an existing local directory")
         top = self.add_dataset(source, dest_path=dest_path)
@@ -424,13 +474,16 @@ class ROCrate:
             self.__entity_map[key] = e
         return entities[0] if len(entities) == 1 else entities
 
-    def delete(self, *entities):
+    def delete(self, *entities: Entity | str) -> None:
         """\
         Delete one or more entities from this RO-Crate.
 
         Note that the crate could be left in an inconsistent state as a result
         of calling this method, since neither entities pointing to the deleted
         ones nor entities pointed to by the deleted ones are modified.
+
+        Args:
+            entities: Any number of `Entity` objects, or `str` representing the ID of those objects
         """
         for e in entities:
             if not isinstance(e, Entity):

@@ -22,19 +22,25 @@
 import os
 from pathlib import Path
 
+from rocrate.rocrate import ROCrate
+from rocrate.types import Properties, StrPath
+
 from .data_entity import DataEntity
 from ..utils import is_url
 
 
 class FileOrDir(DataEntity):
+    fetch_remote: bool
+    source: StrPath | None
 
-    def __init__(self, crate, source=None, dest_path=None, fetch_remote=False,
-                 validate_url=False, properties=None):
+    def __init__(self, crate: ROCrate, source: StrPath | None=None, dest_path: StrPath | None=None, fetch_remote: bool=False,
+                 validate_url: bool=False, properties: Properties=None):
         if properties is None:
             properties = {}
         self.fetch_remote = fetch_remote
         self.validate_url = validate_url
         self.source = source
+        identifier: str
         if dest_path:
             dest_path = Path(dest_path)
             if dest_path.is_absolute():
@@ -44,7 +50,7 @@ class FileOrDir(DataEntity):
             if not isinstance(source, (str, Path)):
                 raise ValueError("dest_path must be provided if source is not a path or URI")
             if is_url(str(source)):
-                identifier = os.path.basename(source) if fetch_remote else source
+                identifier = os.path.basename(source) if fetch_remote else str(source)
             else:
                 identifier = "./" if source == "./" else os.path.basename(source)
         super().__init__(crate, identifier, properties)

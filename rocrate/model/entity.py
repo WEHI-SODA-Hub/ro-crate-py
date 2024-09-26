@@ -25,16 +25,16 @@ from collections.abc import MutableMapping
 from dateutil.parser import isoparse
 from .. import vocabs
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from rocrate.rocrate import ROCrate
 
 
-class Entity(MutableMapping):
+class Entity(MutableMapping[str, Any]):
     crate: ROCrate
 
-    def __init__(self, crate: ROCrate, identifier: str | None=None, properties: dict | None=None):
+    def __init__(self, crate: ROCrate, identifier: str | None=None, properties: dict[str, Any] | None=None):
         self.crate = crate
         if identifier:
             self.__id = self.format_id(identifier)
@@ -86,7 +86,7 @@ class Entity(MutableMapping):
         }
         return val
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         v = self._jsonld[key]
         if v is None or key.startswith("@"):
             return v
