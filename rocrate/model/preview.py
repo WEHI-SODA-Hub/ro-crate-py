@@ -23,6 +23,8 @@ import os
 from pathlib import Path
 
 from jinja2 import Template
+from rocrate.rocrate import ROCrate
+from rocrate.types import EntityLike, Properties, StrPath
 from .file import File
 
 
@@ -34,7 +36,7 @@ class Preview(File):
     """
     BASENAME = "ro-crate-preview.html"
 
-    def __init__(self, crate, source=None, properties=None):
+    def __init__(self, crate: ROCrate, source: StrPath | EntityLike | None=None, properties: Properties=None):
         super().__init__(crate, source, self.BASENAME, properties=properties)
 
     def _empty(self):

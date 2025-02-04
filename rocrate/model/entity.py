@@ -19,13 +19,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datetime import datetime
 import uuid
 from collections.abc import MutableMapping
 
 from dateutil.parser import isoparse
+
+from rocrate.types import EntityLike, EntityType
 from .. import vocabs
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterator
 
 if TYPE_CHECKING:
     from rocrate.rocrate import ROCrate
@@ -33,6 +36,7 @@ if TYPE_CHECKING:
 
 class Entity(MutableMapping[str, Any]):
     crate: ROCrate
+    _jsonld: EntityLike
 
     def __init__(self, crate: ROCrate, identifier: str | None=None, properties: dict[str, Any] | None=None):
         self.crate = crate
@@ -79,8 +83,8 @@ class Entity(MutableMapping[str, Any]):
     def __hash__(self):
         return hash(self.canonical_id())
 
-    def _empty(self):
-        val = {
+    def _empty(self) -> EntityLike:
+        val: dict[str, Any] = {
             "@id": self.id,
             "@type": self._default_type
         }
@@ -90,12 +94,12 @@ class Entity(MutableMapping[str, Any]):
         v = self._jsonld[key]
         if v is None or key.startswith("@"):
             return v
-        values = v if isinstance(v, list) else [v]
+        values: list[Any] = v if isinstance(v, list) else [v]
         deref_values = []
         for entry in values:
             if isinstance(entry, dict):
                 try:
-                    id_ = entry["@id"]
+                    id_: str = entry["@id"]
                 except KeyError:
                     raise ValueError(f"no @id in {entry}")
                 else:
@@ -104,7 +108,7 @@ class Entity(MutableMapping[str, Any]):
                 deref_values.append(entry)
         return deref_values if isinstance(v, list) else deref_values[0]
 
-    def __setitem__(self, key: str, value):
+    def __setitem__(self, key: str, value: Any):
         if key.startswith("@"):
             raise KeyError(f"cannot set '{key}'")
         values = value if isinstance(value, list) else [value]
@@ -119,22 +123,22 @@ class Entity(MutableMapping[str, Any]):
             raise KeyError(f"cannot delete '{key}'")
         del self._jsonld[key]
 
-    def popitem(self):
+    def popitem(self) -> Any:
         raise NotImplementedError
 
-    def clear(self):
+    def clear(self) -> Any:
+        raise NotImplementedError
+    
+    def update(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
-    def update(self):
-        raise NotImplementedError
-
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self._jsonld)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._jsonld)
 
-    def __contains__(self, key):
+    def __contains__(self, key: object):
         return key in self._jsonld
 
     def __eq__(self, other):
@@ -143,21 +147,20 @@ class Entity(MutableMapping[str, Any]):
         return self.id == other.id and self._jsonld == other._jsonld
 
     @property
-    def type(self):
+    def type(self) -> EntityType:
         return self._jsonld['@type']
 
     @property
-    def datePublished(self):
+    def datePublished(self) -> None | datetime:
         d = self.get('datePublished')
         return d if not d else isoparse(d)
 
     @datePublished.setter
-    def datePublished(self, value):
+    def datePublished(self, value: datetime) -> None:
         try:
-            value = value.isoformat()
+            self['datePublished'] = value.isoformat()
         except AttributeError:
             pass
-        self['datePublished'] = value
 
     def delete(self):
         self.crate.delete(self)

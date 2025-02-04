@@ -58,14 +58,13 @@ from .model.computationalworkflow import galaxy_to_abstract_cwl
 from .model.computerlanguage import get_lang
 from .model.testservice import get_service
 from .model.softwareapplication import get_app
-from .types import EntityLike, EntityMap, Properties, StrPath, is_str_path
-import .docstrings
+from .types import EntityLike, EntityMap, Properties, SourceT, StrPath, is_str_path
 
 from .utils import is_url, subclasses, get_norm_value, walk, as_list
 from .metadata import read_metadata, find_root_entity_id
 
 
-def pick_type(json_entity: dict[str, Any], type_map: dict[str, type], fallback: Any=None):
+def pick_type(json_entity: EntityLike, type_map: dict[str, type], fallback: Any=None):
     try:
         t = json_entity["@type"]
     except KeyError:
@@ -124,7 +123,17 @@ class ROCrate:
                 elif not gen_preview:
                     self.add(Preview(self, source))
 
-    def __read(self, source: StrPath | EntityLike, gen_preview: bool=False) -> StrPath:
+    def __read(self, source: StrPath | EntityLike, gen_preview: bool=False) -> Path | EntityLike:
+        """
+        Load metadata entities into the crate
+
+        Args:
+            source: Path to the metadata file to read, or an already-read metadata file
+            gen_preview: If true, generate a `Preview` entity automatically
+
+        Returns:
+            The new `source`, which could be the same or different from the input
+        """
         if is_str_path(source):
             source = Path(source)
             if not source.exists():
@@ -135,9 +144,9 @@ class ROCrate:
                 with zipfile.ZipFile(source, "r") as zf:
                     zf.extractall(zip_path)
                 source = Path(zip_path)
-            metadata_path = source / Metadata.BASENAME
+            metadata_path = source/ Metadata.BASENAME
             if not metadata_path.is_file():
-                metadata_path = source / LegacyMetadata.BASENAME
+                metadata_path = source/ LegacyMetadata.BASENAME
             if not metadata_path.is_file():
                 raise ValueError(f"Not a valid RO-Crate: missing {Metadata.BASENAME}")
         else:
@@ -148,9 +157,19 @@ class ROCrate:
         self.__read_contextual_entities(entities)
         return source
 
-    def __read_data_entities(self, entities, source: StrPath, gen_preview: bool):
-        if isinstance(source, dict):
-            source = Path("")
+    def __read_data_entities(self, entities: EntityMap, source: StrPath | EntityLike, gen_preview: bool) -> None:
+        """
+        Populate the data entities
+
+        Args:
+            entities: A dictionary of `{id: entity}` that will be mutated
+            gen_preview: If true, generate a `Preview` entity automatically
+        """
+        source_path: Path
+        if is_str_path(source):
+            source_path = Path(source)
+        else:
+            source_path = Path("")
         metadata_id, root_id = find_root_entity_id(entities)
         root_entity = entities.pop(root_id)
         assert root_id == root_entity.pop('@id')
@@ -162,11 +181,19 @@ class ROCrate:
 
         preview_entity = entities.pop(Preview.BASENAME, None)
         if preview_entity and not gen_preview:
-            self.add(Preview(self, source / Preview.BASENAME, properties=preview_entity))
-        self.__add_parts(parts, entities, source)
+            self.add(Preview(self, source_path / Preview.BASENAME, properties=preview_entity))
+        self.__add_parts(parts, entities, source_path)
 
-    def __add_parts(self, parts, entities, source):
-        type_map = OrderedDict((_.__name__, _) for _ in subclasses(FileOrDir))
+    def __add_parts(self, parts: list[EntityLike], entities: EntityMap, source: StrPath | EntityLike) -> None:
+        """
+        Recursively detect data entities by following `hasPart` references
+
+        Params:
+            parts: list of entities taken from `hasPart` relationships
+            entities: map of {id: entity} to mutate
+            source: crate metadata source, either as a path or in-memory JSON
+        """
+        type_map: dict[str, type] = OrderedDict((_.__name__, _) for _ in subclasses(FileOrDir))
         for data_entity_ref in parts:
             id_ = data_entity_ref['@id']
             try:
@@ -185,7 +212,13 @@ class ROCrate:
             self.add(instance)
             self.__add_parts(as_list(entity.get("hasPart", [])), entities, source)
 
-    def __read_contextual_entities(self, entities):
+    def __read_contextual_entities(self, entities: EntityMap) -> None:
+        """
+        Populates the contextual (non-data) entities
+
+        Args:
+            entities: map of {id: entity} to mutate
+        """
         type_map = {_.__name__: _ for _ in subclasses(ContextEntity)}
         # types *commonly* used for data entities
         data_entity_types = {"File", "Dataset"}
@@ -197,18 +230,18 @@ class ROCrate:
             self.add(cls(self, identifier, entity))
 
     @property
-    def default_entities(self):
+    def default_entities(self) -> Iterable[DataEntity]:
         return [e for e in self.__entity_map.values()
                 if isinstance(e, (RootDataset, Metadata, LegacyMetadata, Preview))]
 
     @property
-    def data_entities(self):
+    def data_entities(self) -> Iterable[EntityLike]:
         return [e for e in self.__entity_map.values()
                 if not isinstance(e, (RootDataset, Metadata, LegacyMetadata, Preview))
                 and hasattr(e, "write")]
 
     @property
-    def contextual_entities(self):
+    def contextual_entities(self) -> Iterable[EntityLike]:
         return [e for e in self.__entity_map.values()
                 if not isinstance(e, (RootDataset, Metadata, LegacyMetadata, Preview))
                 and not hasattr(e, "write")]
@@ -218,7 +251,7 @@ class ROCrate:
         return self.root_dataset.get('name')
 
     @name.setter
-    def name(self, value):
+    def name(self, value: str):
         self.root_dataset['name'] = value
 
     @property
@@ -234,7 +267,7 @@ class ROCrate:
         return self.root_dataset.get('creator')
 
     @creator.setter
-    def creator(self, value):
+    def creator(self, value: Any):
         self.root_dataset['creator'] = value
 
     @property
@@ -242,7 +275,7 @@ class ROCrate:
         return self.root_dataset.get('license')
 
     @license.setter
-    def license(self, value):
+    def license(self, value: Any):
         self.root_dataset['license'] = value
 
     @property
@@ -250,7 +283,7 @@ class ROCrate:
         return self.root_dataset.get('description')
 
     @description.setter
-    def description(self, value):
+    def description(self, value: Any):
         self.root_dataset['description'] = value
 
     @property
@@ -258,7 +291,7 @@ class ROCrate:
         return self.root_dataset.get('keywords')
 
     @keywords.setter
-    def keywords(self, value):
+    def keywords(self, value: Any):
         self.root_dataset['keywords'] = value
 
     @property
@@ -356,12 +389,12 @@ class ROCrate:
             return [_ for _ in self.get_entities() if type_set <= set(as_list(_.type))]
 
     def add_file(
-            self,
-            source: StrPath | None=None,
-            dest_path: StrPath | None=None,
-            fetch_remote: bool=False,
-            validate_url: bool=False,
-            properties: Properties=None
+        self,
+        source: StrPath | None=None,
+        dest_path: StrPath | None=None,
+        fetch_remote: bool=False,
+        validate_url: bool=False,
+        properties: Properties=None
     ) -> File:
         """
         Create and add a new `File` entity to the crate
@@ -388,12 +421,12 @@ class ROCrate:
         return file
 
     def add_dataset(
-            self,
-            source: StrPath | None=None,
-            dest_path: StrPath | None=None,
-            fetch_remote: bool=False,
-            validate_url: bool=False,
-            properties: Properties=None
+        self,
+        source: StrPath | None=None,
+        dest_path: StrPath | None=None,
+        fetch_remote: bool=False,
+        validate_url: bool=False,
+        properties: Properties=None
     ) -> Dataset:
         """
         Create and add a new `Dataset` entity to the crate

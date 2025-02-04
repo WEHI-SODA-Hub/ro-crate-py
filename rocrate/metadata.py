@@ -20,14 +20,15 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import warnings
 
-from rocrate.types import Context, EntityLike, EntityMap
+from rocrate.types import Context, EntityLike, EntityMap, StrPath, is_str_path
 
 from .model import Metadata, LegacyMetadata
 
 
-def read_metadata(metadata_path: EntityLike | str) -> tuple[
+def read_metadata(metadata_path: EntityLike | StrPath) -> tuple[
     Context,
     dict[str, EntityLike]
 ]:
@@ -41,8 +42,8 @@ def read_metadata(metadata_path: EntityLike | str) -> tuple[
         a tuple of two elements: the context; a dictionary that maps entity ids to the entities themselves.
     """
     metadata: EntityLike
-    if isinstance(metadata_path, str):
-        with open(metadata_path) as f:
+    if is_str_path(metadata_path):
+        with Path(metadata_path).open() as f:
             metadata = json.load(f)
     else:
         metadata = metadata_path

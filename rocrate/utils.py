@@ -21,8 +21,10 @@
 
 import os
 from datetime import datetime, timezone
-from typing import Iterable, TypeVar
+from typing import Any, Iterable, TypeVar
 from urllib.parse import urlsplit
+
+from rocrate.types import StrPath
 
 T = TypeVar("T")
 
@@ -52,7 +54,7 @@ def iso_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def subclasses(cls):
+def subclasses(cls: type) -> Iterable[type]:
     """\
     Recursively iterate through all subclasses (direct and indirect) of cls.
 
@@ -67,7 +69,7 @@ def subclasses(cls):
         yield d
 
 
-def get_norm_value(json_entity, prop):
+def get_norm_value(json_entity: dict[str, Any], prop: str):
     """\
     Get a normalized value for a property (always as a list of strings).
     """

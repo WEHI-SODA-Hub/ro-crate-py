@@ -20,11 +20,14 @@
 # limitations under the License.
 
 from pathlib import Path
+from typing import Any
 import requests
 import shutil
 import urllib.request
 import warnings
 from io import BytesIO, StringIO
+
+from rocrate.types import StrPath
 
 from .file_or_dir import FileOrDir
 from ..utils import is_url, iso_now
@@ -32,14 +35,14 @@ from ..utils import is_url, iso_now
 
 class File(FileOrDir):
 
-    def _empty(self):
+    def _empty(self) -> dict[str, Any]:
         val = {
             "@id": self.id,
             "@type": 'File'
         }
         return val
 
-    def write(self, base_path):
+    def write(self, base_path: StrPath):
         out_file_path = Path(base_path) / self.id
         if isinstance(self.source, (BytesIO, StringIO)):
             out_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -49,8 +52,8 @@ class File(FileOrDir):
         elif is_url(str(self.source)):
             if self.fetch_remote or self.validate_url:
                 if self.validate_url:
-                    if self.source.startswith("http"):
-                        with requests.head(self.source) as response:
+                    if self.source is not None and str(self.source).startswith("http"):
+                        with requests.head(str(self.source)) as response:
                             self._jsonld.update({
                                 'contentSize': response.headers.get('Content-Length'),
                                 'encodingFormat': response.headers.get('Content-Type')
